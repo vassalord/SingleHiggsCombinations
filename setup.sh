@@ -40,6 +40,28 @@ setup() {
 
 
     #
+    # Pre-populate setup file with version overrides (if first time)
+    #
+
+    local setup_file="${SHI_BASE}/.setups/${setup_name}.sh"
+    if [ ! -f "${setup_file}" ]; then
+        mkdir -p "${SHI_BASE}/.setups"
+        echo "# SHI setup file for: ${setup_name}" > "${setup_file}"
+        echo "# Auto-generated with custom Combine/CMSSW versions" >> "${setup_file}"
+        echo "" >> "${setup_file}"
+        echo "export DHI_CMSSW_VERSION=\"${DHI_CMSSW_VERSION}\"" >> "${setup_file}"
+        echo "export DHI_COMBINE_VERSION=\"${DHI_COMBINE_VERSION}\"" >> "${setup_file}"
+        echo "" >> "${setup_file}"
+        echo "# Additional settings will be added by inference/setup.sh during first run" >> "${setup_file}"
+
+        echo ""
+        echo "Created setup file with custom Combine/CMSSW versions: ${setup_file}"
+        echo "The inference setup will now prompt for user-specific settings..."
+        echo ""
+    fi
+
+
+    #
     # Source the inference setup
     #
 
@@ -78,6 +100,9 @@ setup() {
     #
     # Law setup for SHI tasks
     #
+
+    # Override LAW_CONFIG_FILE to use SHI law.cfg (which inherits from inference)
+    export LAW_CONFIG_FILE="${SHI_BASE}/law.cfg"
 
     if which law &> /dev/null; then
         # Re-index to include SHI tasks
