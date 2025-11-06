@@ -80,6 +80,17 @@ setup() {
 
 
     #
+    # Override DHI paths to use absolute paths instead of relative
+    #
+
+    export DHI_DATA="${SHI_BASE}/data"
+    export DHI_STORE="${DHI_DATA}/store"
+    export DHI_STORE_JOBS="${DHI_STORE}"
+    export DHI_STORE_BUNDLES="${DHI_STORE}"
+    export DHI_SOFTWARE="${DHI_DATA}/software"
+
+
+    #
     # Add SHI module to Python path
     #
 
