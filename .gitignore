@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Law
+.law/
+
+# Data and outputs
+data/
+*.root
+*.pdf
+*.png
+*.eps
+
+# Setup configurations (user-specific)
+.setups/
+
+# Environment
+venv/
+ENV/
+env/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
