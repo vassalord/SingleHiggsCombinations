@@ -130,7 +130,6 @@ class AnyPOIsMixin(law.Task):
 class HZZPOIMixin(law.Task):
 
     def load_model_pois(self):
-        # Five POIs used in the HZZ multiSignalModel mapping
         self._r_pois = (
             "r_Njets_0",
             "r_Njets_1",
@@ -138,13 +137,20 @@ class HZZPOIMixin(law.Task):
             "r_Njets_3",
             "r_Njets_4",
         )
-        # No "kappa"-type POIs here
         self._k_pois = tuple()
 
     def get_output_postfix_pois(self):
-        pois = super(HZZPOIMixin, self).get_output_postfix_pois()
-        return tuple(p for p in pois if p in poi_data)
+        return tuple()
 
+    @property
+    def joined_parameter_values(self):
+        pvals = getattr(self, "parameter_values", "")
+        if not pvals:
+            return '""'
+        parts = []
+        for name, val in pvals:
+            parts.append(f"{name}={val}")
+        return ",".join(parts)
 
 # ---------------------------------------------------------------------------
 # 1) CreateWorkspace: text2workspace with multiSignalModel mapping for r_Njets_i
@@ -212,7 +218,7 @@ class HZZSnapshot(HZZBase, AnyPOIsMixin, HZZPOIMixin, DhiSnapshot):
             " --saveNLL"
             " --cminDefaultMinimizerStrategy 0"
             " && "
-            "mv higgsCombineTest.MultiDimFit.mH{mass}.root {output}"
+            "mv higgsCombineTest.MultiDimFit.mH*.root {output}"
         ).format(
             workspace=workspace,
             mass=self.mass,
@@ -242,14 +248,6 @@ class HZZLikelihoodScan(
         significant=False,
         description="extra args passed to combine",
     )
-    scan_parameters = law.CSVParameter(
-        default=(),
-        description=(
-            "scan definition; left empty here and fully set in modify_param_values "
-            "for r_Njets_i"
-        ),
-        significant=False,
-    )
 
     @classmethod
     def modify_param_values(cls, params):
@@ -277,10 +275,13 @@ class HZZLikelihoodScan(
         return params
 
     def workflow_requires(self):
-        reqs = super(HZZLikelihoodScan, self).workflow_requires()
+
+        reqs = {}
 
         if self.use_snapshot:
             reqs["snapshot"] = HZZSnapshot.req_different_branching(self)
+        else:
+            reqs["workspace"] = HZZCreateWorkspace.req_different_branching(self)
 
         return reqs
 
@@ -303,8 +304,9 @@ class HZZMergeLikelihoodScan(
     HZZPOIMixin,
     DhiMergeLikelihoodScan,
 ):
-    # poi �оже п�и�оди� из AnyPOIsMixin (law.Parameter)
 
+    def requires(self):
+        return HZZLikelihoodScan.req(self)
     @classmethod
     def modify_param_values(cls, params):
         params = super(HZZMergeLikelihoodScan, cls).modify_param_values(params)
