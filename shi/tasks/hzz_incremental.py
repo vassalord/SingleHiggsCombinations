@@ -183,21 +183,20 @@ class HZZCreateWorkspace(HZZBase, DhiCreateWorkspace):
 # 2) Snapshot: do a global fit, freeze MH, store as Combine snapshot for scans
 # ---------------------------------------------------------------------------
 
-class HZZSnapshot(HZZBase, AnyPOIsMixin, DhiSnapshot):
+class HZZSnapshot(HZZBase, AnyPOIsMixin, HZZPOIMixin, DhiSnapshot):
+
+    allow_empty_hh_model = True
 
     def workflow_requires(self):
-        return {
-            "workspace": HZZCreateWorkspace.req_different_branching(self),
-        }
+        reqs = super(HZZSnapshot, self).workflow_requires()
+        reqs["workspace"] = HZZCreateWorkspace.req_different_branching(self)
+        return reqs
 
     def requires(self):
-        return {
-            "workspace": HZZCreateWorkspace.req(self),
-        }
+        return HZZCreateWorkspace.req(self, branch=0)
 
     def build_command(self, fallback_level):
-        workspace = self.input()["workspace"].path \
-            if isinstance(self.input(), dict) else self.input().path
+        workspace = self.input().path
         output = self.output().path
         seed = self.branch if getattr(self, "branch", -1) >= 0 else 0
 
@@ -235,17 +234,21 @@ class HZZLikelihoodScan(
     DhiLikelihoodScan,
 ):
 
-    # Use the snapshot produced above as starting point
     use_snapshot = True
-
-    # Higgs mass
     mass = luigi.FloatParameter(default=125.38)
 
-    # Additional Combine flags from your example
     custom_args = luigi.Parameter(
         default="--floatOtherPOIs=1 --cminDefaultMinimizerStrategy 0 --freezeParameters MH",
         significant=False,
         description="extra args passed to combine",
+    )
+    scan_parameters = law.CSVParameter(
+        default=(),
+        description=(
+            "scan definition; left empty here and fully set in modify_param_values "
+            "for r_Njets_i"
+        ),
+        significant=False,
     )
 
     @classmethod
@@ -254,20 +257,18 @@ class HZZLikelihoodScan(
 
         poi = params.get("poi", "r_Njets_0")
 
-        # Only this POI is scanned
         params["pois"] = (poi,)
         params["scan_parameters"] = ((poi, 0.0, 2.0, 200),)
 
-        # Fix all other r_Njets to 1 via --setParameters
         all_pois = [f"r_Njets_{i}" for i in range(5)]
         others = [p for p in all_pois if p != poi]
+
         pvals = list(params.get("parameter_values", ()))
         pvals = [pv for pv in pvals if pv[0] not in all_pois]
         for op in others:
             pvals.append((op, "1"))
         params["parameter_values"] = tuple(pvals)
 
-        # Also freeze MH (if not already)
         frozen = list(params.get("frozen_parameters", ()))
         if "MH" not in frozen:
             frozen.append("MH")
@@ -277,24 +278,18 @@ class HZZLikelihoodScan(
 
     def workflow_requires(self):
         reqs = super(HZZLikelihoodScan, self).workflow_requires()
-        reqs["snapshot"] = HZZSnapshot(
-            version=self.version,
-            datacards=self.datacards,
-            workspace_name=self.workspace_name,
-    #        hh_model=self.hh_model,
-        )
+
+        if self.use_snapshot:
+            reqs["snapshot"] = HZZSnapshot.req_different_branching(self)
+
         return reqs
 
     def requires(self):
         if self.use_snapshot:
             return {
-                "snapshot": HZZSnapshot(
-                    version=self.version,
-                    datacards=self.datacards,
-                    workspace_name=self.workspace_name,
-        #            hh_model=self.hh_model,
-                )
+                "snapshot": HZZSnapshot.req(self),
             }
+
         return super(HZZLikelihoodScan, self).requires()
 
 
