@@ -41,6 +41,24 @@ if hasattr(law_parameter.Parameter, "_check_choices"):
 
     law_parameter.Parameter._check_choices = _njets_friendly_check_choices
 
+from dhi.tasks.combine import CombineDatacards
+
+# ---------------------------------------------------------------------------
+# Force keep_additional_signals = "all" for all tasks using CombineDatacards
+# ---------------------------------------------------------------------------
+
+try:
+    old_param = CombineDatacards.keep_additional_signals
+
+    CombineDatacards.keep_additional_signals = luigi.ChoiceParameter(
+        default="all",
+        choices=list(old_param.choices),   # ["no", "all", "sh"]
+        significant=old_param.significant,
+        description=old_param.description,
+    )
+except Exception:
+    pass
+
 
 _hzz_njets_pois = tuple(f"r_Njets_{i}" for i in range(5))
 
@@ -82,11 +100,11 @@ class HZZBase(law.Task):
     # Name for the produced workspace file
     workspace_name = luigi.Parameter(default="HZZ.root")
 
-    # HH model is irrelevant for single-Higgs HZZ
     hh_model = luigi.Parameter(
-        default="hh_model.model_default",
-        description="HH model string; for pure HZZ leave as default.",
+        default=law.NO_STR, 
+        description="HH model is irrelevant for single-Higgs HZZ; leave empty.",
     )
+
 
     # DHI Combine tasks accept an empty hh_model when this flag is True
     allow_empty_hh_model = True
@@ -167,18 +185,20 @@ class HZZCreateWorkspace(HZZBase, DhiCreateWorkspace):
 
 class HZZSnapshot(HZZBase, AnyPOIsMixin, DhiSnapshot):
 
+    def workflow_requires(self):
+        return {
+            "workspace": HZZCreateWorkspace.req_different_branching(self),
+        }
+
     def requires(self):
-        return HZZCreateWorkspace.req(self)
+        return {
+            "workspace": HZZCreateWorkspace.req(self),
+        }
 
     def build_command(self, fallback_level):
-
-        # Workspace that was created by HZZCreateWorkspace
-        workspace = self.input().path
-
-        # Final snapshot output wanted by law/DHI
+        workspace = self.input()["workspace"].path \
+            if isinstance(self.input(), dict) else self.input().path
         output = self.output().path
-
-        # Use branch index as seed when available, otherwise 0
         seed = self.branch if getattr(self, "branch", -1) >= 0 else 0
 
         cmd = (
@@ -214,7 +234,6 @@ class HZZLikelihoodScan(
     HZZPOIMixin,
     DhiLikelihoodScan,
 ):
-    # poi Ð±ÐµÑÑÑÑÑ Ð¸Ð· AnyPOIsMixin (law.Parameter, default="r_Njets_0")
 
     # Use the snapshot produced above as starting point
     use_snapshot = True
@@ -262,7 +281,7 @@ class HZZLikelihoodScan(
             version=self.version,
             datacards=self.datacards,
             workspace_name=self.workspace_name,
-            hh_model=self.hh_model,
+    #        hh_model=self.hh_model,
         )
         return reqs
 
@@ -273,7 +292,7 @@ class HZZLikelihoodScan(
                     version=self.version,
                     datacards=self.datacards,
                     workspace_name=self.workspace_name,
-                    hh_model=self.hh_model,
+        #            hh_model=self.hh_model,
                 )
             }
         return super(HZZLikelihoodScan, self).requires()
@@ -365,7 +384,7 @@ class HZZPlotMultipleLikelihoodScans(
                     version=self.version,
                     datacards=tuple(datacard_group),
                     workspace_name=self.workspace_name,
-                    hh_model=self.hh_model,
+            #        hh_model=self.hh_model,
                     poi=poi,
                 )
             ]
@@ -386,13 +405,13 @@ class HZZAllPOIs(HZZBase):
             version=self.version,
             datacards=self.datacards,
             workspace_name=self.workspace_name,
-            hh_model=self.hh_model,
+    #        hh_model=self.hh_model,
         )
         snap = HZZSnapshot(
             version=self.version,
             datacards=self.datacards,
             workspace_name=self.workspace_name,
-            hh_model=self.hh_model,
+    #        hh_model=self.hh_model,
         )
 
         # The five POIs to scan
@@ -404,7 +423,7 @@ class HZZAllPOIs(HZZBase):
                 version=self.version,
                 datacards=self.datacards,
                 workspace_name=self.workspace_name,
-                hh_model=self.hh_model,
+        #        hh_model=self.hh_model,
                 poi=p,
             )
             for p in pois
@@ -416,7 +435,7 @@ class HZZAllPOIs(HZZBase):
                 version=self.version,
                 datacards=self.datacards,
                 workspace_name=self.workspace_name,
-                hh_model=self.hh_model,
+        #        hh_model=self.hh_model,
                 poi=p,
             )
             for p in pois
@@ -428,7 +447,7 @@ class HZZAllPOIs(HZZBase):
                 version=self.version,
                 datacards=self.datacards,
                 workspace_name=self.workspace_name,
-                hh_model=self.hh_model,
+        #        hh_model=self.hh_model,
                 poi=p,
             )
             for p in pois
@@ -438,7 +457,7 @@ class HZZAllPOIs(HZZBase):
             version=self.version,
             datacards=self.datacards,
             workspace_name=self.workspace_name,
-            hh_model=self.hh_model,
+        #    hh_model=self.hh_model,
             multi_datacards=(tuple(self.datacards),),
         )
 
