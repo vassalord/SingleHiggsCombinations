@@ -4,7 +4,7 @@
 import law
 import luigi
 
-
+from law.util import flatten
 # DHI building blocks
 from dhi.tasks.combine import (
     CreateWorkspace as DhiCreateWorkspace,
@@ -59,8 +59,19 @@ try:
 except Exception:
     pass
 
+class HZZPOIEntry(dict):
+    def __init__(self, label, sm_value=1.0):
+        super().__init__(label=label, sm_value=sm_value)
+        self.label = label
+        self.sm_value = sm_value
+
 
 _hzz_njets_pois = tuple(f"r_Njets_{i}" for i in range(5))
+
+for i, name in enumerate(_hzz_njets_pois):
+    if name not in poi_data:
+        label = f"r_{{N_{{\\text{{jets}}={i}}}}}"
+        poi_data[name] = HZZPOIEntry(label=label, sm_value=1.0)
 
 try:
     poi_choices = getattr(POITask.poi, "choices", None)
@@ -151,6 +162,8 @@ class HZZPOIMixin(law.Task):
         for name, val in pvals:
             parts.append(f"{name}={val}")
         return ",".join(parts)
+    def get_shown_parameters(self):
+        return {}
 
 # ---------------------------------------------------------------------------
 # 1) CreateWorkspace: text2workspace with multiSignalModel mapping for r_Njets_i
@@ -326,7 +339,9 @@ class HZZPlotLikelihoodScan(
     HZZPOIMixin,
     DhiPlotLikelihoodScan,
 ):
-    # poi из AnyPOIsMixin
+
+    def requires(self):
+        return [HZZMergeLikelihoodScan.req(self)]
 
     @classmethod
     def modify_param_values(cls, params):
@@ -381,7 +396,6 @@ class HZZPlotMultipleLikelihoodScans(
                     version=self.version,
                     datacards=tuple(datacard_group),
                     workspace_name=self.workspace_name,
-            #        hh_model=self.hh_model,
                     poi=poi,
                 )
             ]
@@ -402,13 +416,11 @@ class HZZAllPOIs(HZZBase):
             version=self.version,
             datacards=self.datacards,
             workspace_name=self.workspace_name,
-    #        hh_model=self.hh_model,
         )
         snap = HZZSnapshot(
             version=self.version,
             datacards=self.datacards,
             workspace_name=self.workspace_name,
-    #        hh_model=self.hh_model,
         )
 
         # The five POIs to scan
@@ -420,7 +432,6 @@ class HZZAllPOIs(HZZBase):
                 version=self.version,
                 datacards=self.datacards,
                 workspace_name=self.workspace_name,
-        #        hh_model=self.hh_model,
                 poi=p,
             )
             for p in pois
@@ -432,7 +443,6 @@ class HZZAllPOIs(HZZBase):
                 version=self.version,
                 datacards=self.datacards,
                 workspace_name=self.workspace_name,
-        #        hh_model=self.hh_model,
                 poi=p,
             )
             for p in pois
@@ -444,7 +454,6 @@ class HZZAllPOIs(HZZBase):
                 version=self.version,
                 datacards=self.datacards,
                 workspace_name=self.workspace_name,
-        #        hh_model=self.hh_model,
                 poi=p,
             )
             for p in pois
@@ -454,8 +463,7 @@ class HZZAllPOIs(HZZBase):
             version=self.version,
             datacards=self.datacards,
             workspace_name=self.workspace_name,
-        #    hh_model=self.hh_model,
-            multi_datacards=(tuple(self.datacards),),
+            multi_datacards=(self.datacards,),
         )
 
         return {
@@ -467,8 +475,8 @@ class HZZAllPOIs(HZZBase):
             "multi": multi,
         }
 
-    def output(self):
-        return law.LocalFileTarget("hzz_all_pois.done")
-
+    def complete(self):
+        reqs = self.requires()
+        return all(t.complete() for t in flatten(reqs.values()))
     def run(self):
         self.output().dump("ok")
