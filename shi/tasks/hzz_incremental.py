@@ -320,6 +320,16 @@ class HZZPlotLikelihoodScan(
     DhiPlotLikelihoodScan,
 ):
 
+    def get_axis_limit(self, name):
+        if name == "x_min":
+            return -2.0
+        if name == "x_max":
+            return 2.0
+
+        if name == "y_min":
+            return 0.0
+        if name == "y_max":
+            return 10.0
     def requires(self):
         return [HZZMergeLikelihoodScan.req(self)]
 
@@ -343,6 +353,16 @@ class HZZPlotMultipleLikelihoodScans(
     DhiPlotMultipleLikelihoodScans,
 ):
 
+    def get_axis_limit(self, name):
+        if name == "x_min":
+            return -2.0
+        if name == "x_max":
+            return 2.0
+
+        if name == "y_min":
+            return 0.0
+        if name == "y_max":
+            return 10.0
     pois = law.CSVParameter(
         default=tuple(f"r_Njets_{i}" for i in range(5)),
         description="POIs to overlay",
