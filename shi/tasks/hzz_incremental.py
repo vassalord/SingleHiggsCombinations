@@ -21,26 +21,6 @@ from dhi.tasks.likelihoods import (
 
 import law.parameter as law_parameter
 
-if hasattr(law_parameter.Parameter, "_check_choices"):
-    _original_check_choices = law_parameter.Parameter._check_choices
-
-    def _njets_friendly_check_choices(self, value):
-
-        def is_njets(v):
-            return isinstance(v, str) and v.startswith("r_Njets_")
-
-        if isinstance(value, (list, tuple, set)):
-            vals = list(value)
-            if vals and all(is_njets(v) for v in vals):
-                return
-
-        if is_njets(value):
-            return
-
-        return _original_check_choices(self, value)
-
-    law_parameter.Parameter._check_choices = _njets_friendly_check_choices
-
 from dhi.tasks.combine import CombineDatacards
 
 # ---------------------------------------------------------------------------
@@ -362,21 +342,17 @@ class HZZPlotMultipleLikelihoodScans(
     HZZPOIMixin,     # pretend the model has r_Njets_[0..4] as POIs
     DhiPlotMultipleLikelihoodScans,
 ):
+
     pois = law.CSVParameter(
-        default=("r_Njets_0",),
-        description="POIs to overlay (only the first one is used here)",
+        default=tuple(f"r_Njets_{i}" for i in range(5)),
+        description="POIs to overlay",
     )
 
     @classmethod
     def modify_param_values(cls, params):
         params = super(HZZPlotMultipleLikelihoodScans, cls).modify_param_values(params)
 
-        # Get the POI list, defaulting to r_Njets_0 if empty
-        pois = params.get("pois", ("r_Njets_0",))
-        if not pois:
-            pois = ("r_Njets_0",)
-
-        # DHI expects n_pois == 1 or 2; we only support 1 here
+        pois = params.get("pois") or tuple(f"r_Njets_{i}" for i in range(5))
         poi = pois[0]
         params["pois"] = (poi,)
 
@@ -386,8 +362,6 @@ class HZZPlotMultipleLikelihoodScans(
         return params
 
     def requires(self):
-        # Effective POI used for the overlay (same logic as in modify_param_values)
-        poi = (self.pois[0] if self.pois else "r_Njets_0")
 
         requirements = []
         for datacard_group in self.multi_datacards:
@@ -398,6 +372,7 @@ class HZZPlotMultipleLikelihoodScans(
                     workspace_name=self.workspace_name,
                     poi=poi,
                 )
+                for poi in self.pois
             ]
             requirements.append(merge_tasks)
 
@@ -459,12 +434,16 @@ class HZZAllPOIs(HZZBase):
             for p in pois
         ]
 
-        multi = HZZPlotMultipleLikelihoodScans(
-            version=self.version,
-            datacards=self.datacards,
-            workspace_name=self.workspace_name,
-            multi_datacards=(self.datacards,),
-        )
+        multi = [
+            HZZPlotMultipleLikelihoodScans(
+                version=self.version,
+                datacards=self.datacards,
+                workspace_name=self.workspace_name,
+                multi_datacards=(self.datacards,),
+                pois=tuple(pois),
+            )
+            for p in pois
+        ]
 
         return {
             "workspace": ws,
