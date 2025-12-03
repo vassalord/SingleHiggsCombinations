@@ -322,7 +322,7 @@ class HZZPlotLikelihoodScan(
 
     def get_axis_limit(self, name):
         if name == "x_min":
-            return -2.0
+            return 0.0
         if name == "x_max":
             return 2.0
 
@@ -355,7 +355,7 @@ class HZZPlotMultipleLikelihoodScans(
 
     def get_axis_limit(self, name):
         if name == "x_min":
-            return -2.0
+            return 0.0
         if name == "x_max":
             return 2.0
 
@@ -364,7 +364,7 @@ class HZZPlotMultipleLikelihoodScans(
         if name == "y_max":
             return 10.0
     pois = law.CSVParameter(
-        default=tuple(f"r_Njets_{i}" for i in range(5)),
+        default=("r_Njets_0",),
         description="POIs to overlay",
     )
 
@@ -372,7 +372,7 @@ class HZZPlotMultipleLikelihoodScans(
     def modify_param_values(cls, params):
         params = super(HZZPlotMultipleLikelihoodScans, cls).modify_param_values(params)
 
-        pois = params.get("pois") or tuple(f"r_Njets_{i}" for i in range(5))
+        pois = params.get("pois") or ("r_Njets_0",)
         poi = pois[0]
         params["pois"] = (poi,)
 
@@ -390,9 +390,8 @@ class HZZPlotMultipleLikelihoodScans(
                     version=self.version,
                     datacards=tuple(datacard_group),
                     workspace_name=self.workspace_name,
-                    poi=poi,
+                    poi=self.pois[0],
                 )
-                for poi in self.pois
             ]
             requirements.append(merge_tasks)
 
@@ -403,7 +402,7 @@ class HZZPlotMultipleLikelihoodScans(
 # 7) HZZAllPOIs: orchestrate full chain for the 5 Njets POIs
 # ---------------------------------------------------------------------------
 
-class HZZAllPOIs(HZZBase):
+class HZZAllPOIs(HZZBase, law.WrapperTask):
 
     def requires(self):
         # Workspace and snapshot first
@@ -460,7 +459,7 @@ class HZZAllPOIs(HZZBase):
                 datacards=self.datacards,
                 workspace_name=self.workspace_name,
                 multi_datacards=(self.datacards,),
-                pois=tuple(pois),
+                pois=(p,),
             )
             for p in pois
         ]
@@ -474,8 +473,3 @@ class HZZAllPOIs(HZZBase):
             "multi": multi,
         }
 
-    def complete(self):
-        reqs = self.requires()
-        return all(t.complete() for t in flatten(reqs.values()))
-    def run(self):
-        self.output().dump("ok")
