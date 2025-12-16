@@ -151,6 +151,80 @@ Custom tasks in the `shi.tasks` namespace:
 law run shi.HelloWorld --help     # Example task extending DHI
 ```
 
+### HZZ Njets likelihood scans
+These custom law/luigi tasks under shi.tasks do:
+
+1. build a workspace from an HZZ Run-2 datacard (text2workspace.py, multiSignalModel)
+2. create a Combine snapshot (global fit, freeze MH)  
+3. run 1D likelihood grid scans for each POI r_Njets_[0..4]    
+4. merge scan outputs into .npz    
+5. make per-POI 1D likelihood plots (nll1d__...pdf/png)    
+6. produce a final Njets “step” XS plot comparing HZZ result vs theory from your .pkl files
+
+**How to run**
+
+0) Setup environment (as you already do)
+```bash
+cd SingleHiggsCombinations
+source setup.sh
+```
+1) Quick sanity check
+   
+Make sure law “sees” the tasks:
+```bash
+law index --verbose
+law index | grep -E "shi\.HZZ(AllPOIs|PlotNjetsXS|LikelihoodScan|MergeLikelihoodScan|PlotLikelihoodScan)" -n
+```
+
+2) Run the full chain for all Njets POIs
+
+Workspace → snapshot → scans → merges → 1D likelihood plots:
+
+```bash
+law run shi.HZZAllPOIs
+```
+
+3) Build the final Njets “step” XS plot (HZZ vs theory)
+
+This task consumes the merged .npz outputs + your theory .pkl files:
+
+```bash
+law run shi.HZZPlotNjetsXS 
+```
+**Inputs you must set**
+1) Pass your own datacard path (or keep the default if you already set it in the task):
+
+        --datacards /path/to/your/hzz_datacard.txt
+2) Theory .pkl files
+
+Provide your own AFS paths (don’t copy someone else’s):
+
+- theory_pred_pkl: numpy array shape [5,3]
+- theory_unc_pkl: numpy array shape [2,5]
+  
+**Paths you must change**
+
+- These defaults are currently hardcoded in shi/tasks/hzz_incremental.py and are very likely personal:
+
+    - Datacard path (HZZBase.datacards default):
+
+        Replace /afs/cern.ch/user/<YOU>/251107_Hzz/hig-21-009/... with yours.
+
+Or override from CLI:
+```bash
+law run shi.HZZAllPOIs \
+  --datacards /path/to/your/hzz_datacard.txt \
+  --workspace-name HZZ.root \
+  --version dev
+```
+```bash
+law run shi.HZZPlotNjetsXS \
+  --version dev \
+  --theory-pred-pkl /afs/cern.ch/user/<YOU>/theoryPred_Njets2p5_18_fullPS.pkl \
+  --theory-unc-pkl  /afs/cern.ch/user/<YOU>/theoryPred_Njets2p5_18_fullPS_theoryUnc.pkl
+```
+
+
 ## Example: Hello World Task
 
 The `HelloWorld` task demonstrates how to extend DHI tasks:
