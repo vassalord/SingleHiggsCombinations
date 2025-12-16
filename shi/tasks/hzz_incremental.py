@@ -4,6 +4,12 @@
 import law
 import luigi
 
+import os
+import pickle
+import numpy as np
+import matplotlib.pyplot as plt
+import mplhep as hep
+
 from law.util import flatten
 # DHI building blocks
 from dhi.tasks.combine import (
@@ -20,8 +26,10 @@ from dhi.tasks.likelihoods import (
 )
 
 import law.parameter as law_parameter
-
+from law.target.local import LocalFileTarget
 from dhi.tasks.combine import CombineDatacards
+from law.util import create_hash
+from law.target.local import LocalFileTarget
 
 # ---------------------------------------------------------------------------
 # Force keep_additional_signals = "all" for all tasks using CombineDatacards
@@ -397,15 +405,11 @@ class HZZPlotMultipleLikelihoodScans(
 
         return requirements
 
-
 # ---------------------------------------------------------------------------
 # 7) HZZAllPOIs: orchestrate full chain for the 5 Njets POIs
 # ---------------------------------------------------------------------------
-
 class HZZAllPOIs(HZZBase, law.WrapperTask):
-
     def requires(self):
-        # Workspace and snapshot first
         ws = HZZCreateWorkspace(
             version=self.version,
             datacards=self.datacards,
@@ -417,10 +421,8 @@ class HZZAllPOIs(HZZBase, law.WrapperTask):
             workspace_name=self.workspace_name,
         )
 
-        # The five POIs to scan
         pois = [f"r_Njets_{i}" for i in range(5)]
 
-        # One likelihood scan per POI
         scans = [
             HZZLikelihoodScan(
                 version=self.version,
@@ -431,7 +433,6 @@ class HZZAllPOIs(HZZBase, law.WrapperTask):
             for p in pois
         ]
 
-        # Merge outputs of each scan
         merges = [
             HZZMergeLikelihoodScan(
                 version=self.version,
@@ -442,7 +443,6 @@ class HZZAllPOIs(HZZBase, law.WrapperTask):
             for p in pois
         ]
 
-        # Produce one plot per POI
         plots = [
             HZZPlotLikelihoodScan(
                 version=self.version,
@@ -453,23 +453,91 @@ class HZZAllPOIs(HZZBase, law.WrapperTask):
             for p in pois
         ]
 
-        multi = [
-            HZZPlotMultipleLikelihoodScans(
-                version=self.version,
-                datacards=self.datacards,
-                workspace_name=self.workspace_name,
-                multi_datacards=(self.datacards,),
-                pois=(p,),
-            )
-            for p in pois
-        ]
-
         return {
             "workspace": ws,
             "snapshot": snap,
             "scans": scans,
             "merges": merges,
             "plots": plots,
-            "multi": multi,
         }
 
+
+# ---------------------------------------------------------------------------
+# 8) HZZPlotNjetsXS: final "step" plot using merged scan results + theory pkls
+# ---------------------------------------------------------------------------
+class HZZPlotNjetsXS(HZZBase):
+    """
+    Build the final Njets step-plot from:
+      - MergeLikelihoodScan outputs for r_Njets_0..4  (npz)
+      - theory prediction pkl:    (5,3)
+      - theory uncertainty pkl:   (2,5)
+
+    Output is written under:
+      <repo>/data/plots/njets_xs/datacards_<hash>/v<version>/
+    """
+
+    pois = law.CSVParameter(
+        default=tuple(f"r_Njets_{i}" for i in range(5)),
+        description="POIs to use (expected r_Njets_0..4).",
+    )
+
+    theory_pred_pkl = luigi.Parameter(
+        default="/afs/cern.ch/user/s/shoienko/theoryPred_Njets2p5_18_fullPS.pkl",
+        description="Path to theory prediction pkl (numpy array shape [5,3]).",
+    )
+
+    theory_unc_pkl = luigi.Parameter(
+        default="/afs/cern.ch/user/s/shoienko/theoryPred_Njets2p5_18_fullPS_theoryUnc.pkl",
+        description="Path to theory uncertainty pkl (numpy array shape [2,5]).",
+    )
+
+    def requires(self):
+        # One merged scan per POI
+        reqs = {}
+        for p in self.pois:
+            reqs[p] = HZZMergeLikelihoodScan.req(self, poi=p)
+        return reqs
+
+    def output(self):
+        # hash datacards so different inputs don't overwrite each other
+        dc_hash = create_hash(tuple(self.datacards))
+
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        out_base = os.path.join(
+            repo_root,
+            "data",
+            "plots",
+            "njets_xs",
+            f"datacards_{dc_hash}",
+            f"v{self.version}",
+        )
+
+        return {
+            "json": LocalFileTarget(os.path.join(out_base, f"njets_xs__{self.version}.json")),
+            "pdf":  LocalFileTarget(os.path.join(out_base, f"njets_xs__{self.version}.pdf")),
+            "png":  LocalFileTarget(os.path.join(out_base, f"njets_xs__{self.version}.png")),
+        }
+
+    @law.decorator.log
+    @law.decorator.safe_output
+    def run(self):
+        from shi.plots.njets_xs import plot_njets_xs
+
+        out = self.output()
+
+        # Ensure output directory exists (so complete()/run() never fails on mkdir)
+        os.makedirs(os.path.dirname(out["pdf"].path), exist_ok=True)
+
+        merge_npz_by_poi = {poi: tgt.path for poi, tgt in self.input().items()}
+
+        plot_njets_xs(
+            merge_npz_by_poi=merge_npz_by_poi,
+            theory_pred_pkl=self.theory_pred_pkl,
+            theory_unc_pkl=self.theory_unc_pkl,
+            out_pdf=out["pdf"].path,
+            out_png=out["png"].path,
+            out_json=out["json"].path,
+            title="HZZ",
+            cms_label="Preliminary",
+            lumi_fb=None,
+        )
